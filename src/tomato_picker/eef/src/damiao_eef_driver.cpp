@@ -123,6 +123,8 @@ DamiaoEefError map_channel_error(serial_arm::protocol::damiao_usb2can::Err error
             return DamiaoEefError::BUS_CONFIG_CONFLICT;
         case ChannelError::TYPE_MISMATCH:
             return DamiaoEefError::BUS_TYPE_MISMATCH;
+        case ChannelError::PHYSICAL_RESOURCE_CONFLICT:
+            return DamiaoEefError::BUS_PHYSICAL_RESOURCE_CONFLICT;
     }
     return DamiaoEefError::OPEN_FAILED;
 }
@@ -215,6 +217,7 @@ const char* damiao_eef_error_string(DamiaoEefError error) noexcept {
         case DamiaoEefError::OPEN_FAILED: return "shared CAN channel open failed";
         case DamiaoEefError::BUS_CONFIG_CONFLICT: return "main_can configuration conflict";
         case DamiaoEefError::BUS_TYPE_MISMATCH: return "main_can bus type mismatch";
+        case DamiaoEefError::BUS_PHYSICAL_RESOURCE_CONFLICT: return "main_can physical resource conflict";
         case DamiaoEefError::ENABLE_FAILED: return "motor enable failed";
         case DamiaoEefError::DISABLE_FAILED: return "motor disable failed";
         case DamiaoEefError::KP_APR_FAILED: return "KP_APR write verification failed";

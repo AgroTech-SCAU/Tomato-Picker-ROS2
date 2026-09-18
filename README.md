@@ -86,7 +86,7 @@ Tomato-Picker-ROS2/
 
 ### 1. 获取 SerialArm-Core
 
-在仓库根目录：
+当前工作区固定使用 **SerialArm-Core `v0.5.1`**；在仓库根目录：
 
 ```bash
 source /opt/ros/humble/setup.bash
