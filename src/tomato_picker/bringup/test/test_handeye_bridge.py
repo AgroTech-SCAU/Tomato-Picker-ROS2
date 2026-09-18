@@ -37,15 +37,32 @@ def _install_import_stubs():
     sys.modules["rclpy"] = rclpy
     sys.modules["rclpy.node"] = rclpy_node
 
+    std_srvs = types.ModuleType("std_srvs")
+    std_srvs_srv = types.ModuleType("std_srvs.srv")
+
+    class Trigger:
+        pass
+
+    std_srvs_srv.Trigger = Trigger
+    std_srvs.srv = std_srvs_srv
+    sys.modules["std_srvs"] = std_srvs
+    sys.modules["std_srvs.srv"] = std_srvs_srv
+
     serial_arm = types.ModuleType("serial_arm")
 
     class JointImpedanceMode:
+        RIGID_HOLD = object()
         COMPLIANT_DRAG = object()
+
+    class RobotState:
+        ACTIVE = object()
+        FAULT = object()
 
     class RobotSession:
         pass
 
     serial_arm.JointImpedanceMode = JointImpedanceMode
+    serial_arm.RobotState = RobotState
     serial_arm.RobotSession = RobotSession
     serial_arm.load_robot_profile_core = lambda *_args, **_kwargs: None
     sys.modules["serial_arm"] = serial_arm
@@ -115,6 +132,43 @@ class HandeyeBridgeContractTest(unittest.TestCase):
             "wrist_target_gui",
         ):
             self.assertNotIn(forbidden, source)
+
+
+    def test_v051_fault_recovery_services_are_exposed(self):
+        source = BRIDGE.read_text(encoding="utf-8")
+        self.assertIn("RobotState", source)
+        self.assertIn("Trigger", source)
+        self.assertIn('"/handeye/fault/clear"', source)
+        self.assertIn('"/handeye/fault/compliant_recovery"', source)
+        self.assertIn('"/handeye/fault/rigid_hold"', source)
+        self.assertIn('"/handeye/drag/enable"', source)
+        self.assertIn("self._session.clear_fault()", source)
+        self.assertIn("self._session.enter_fault_compliant_recovery()", source)
+        self.assertIn("self._session.return_to_fault_rigid_hold()", source)
+
+    def test_pose_publication_requires_active_valid_snapshot(self):
+        source = BRIDGE.read_text(encoding="utf-8")
+        self.assertIn("RobotState.ACTIVE", source)
+        self.assertIn("snapshot.valid", source)
+        self.assertIn("snapshot.last_error", source)
+        self.assertIn("if state != RobotState.ACTIVE", source)
+
+    def test_fault_clear_does_not_automatically_reenable_drag(self):
+        source = BRIDGE.read_text(encoding="utf-8")
+        clear_start = source.index("def _clear_fault")
+        clear_end = source.index("def _enter_fault_compliant_recovery", clear_start)
+        clear_body = source[clear_start:clear_end]
+        self.assertIn("self._session.clear_fault()", clear_body)
+        self.assertNotIn("JointImpedanceMode.COMPLIANT_DRAG", clear_body)
+
+    def test_drag_enable_requires_fresh_active_snapshot(self):
+        source = BRIDGE.read_text(encoding="utf-8")
+        drag_start = source.index("def _enable_drag")
+        drag_end = source.index("def stop_session", drag_start)
+        drag_body = source[drag_start:drag_end]
+        self.assertIn("RobotState.ACTIVE", drag_body)
+        self.assertIn("snapshot.valid", drag_body)
+        self.assertIn("JointImpedanceMode.COMPLIANT_DRAG", drag_body)
 
     def test_build_metadata_installs_bridge_and_declares_direct_dependencies(self):
         cmake = CMAKE.read_text(encoding="utf-8")

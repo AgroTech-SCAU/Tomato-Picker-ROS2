@@ -18,6 +18,7 @@ def generate_launch_description():
         executable="handeye_bridge",
         name="handeye_bridge",
         output="screen",
+        emulate_tty=True,
         parameters=[
             {
                 "robot_profile": ParameterValue(robot_profile, value_type=str),

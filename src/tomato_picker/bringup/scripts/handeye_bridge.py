@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
 
-"""Minimal SerialArm hand-eye calibration bridge.
-
-This node is intentionally independent from ros2_control/MoveIt. It owns the
-arm through SerialArm-Core RobotSession, switches the arm to compliant drag,
-and republishes the Core cached tool pose as geometry_msgs/PoseStamped for the
-Handeye-Calibration-App.
-"""
-
 import math
 from typing import Optional, Tuple
 
@@ -15,8 +7,19 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
+from std_srvs.srv import Trigger
 
-from serial_arm import JointImpedanceMode, RobotSession, load_robot_profile_core
+from serial_arm import (
+    JointImpedanceMode,
+    RobotSession,
+    RobotState,
+    load_robot_profile_core,
+)
+
+CLEAR_FAULT_SERVICE = "/handeye/fault/clear"
+COMPLIANT_RECOVERY_SERVICE = "/handeye/fault/compliant_recovery"
+RIGID_HOLD_SERVICE = "/handeye/fault/rigid_hold"
+ENABLE_DRAG_SERVICE = "/handeye/drag/enable"
 
 
 def transform_matrix_to_pose(transform: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -80,7 +83,7 @@ def _optional_baudrate(value: str) -> Optional[int]:
 
 
 class HandeyeBridge(Node):
-    """Own the SerialArm session and publish base->tool pose for calibration."""
+    """Own the SerialArm session and publish safe hand-eye calibration pose data."""
 
     def __init__(self) -> None:
         super().__init__("handeye_bridge")
@@ -120,13 +123,29 @@ class HandeyeBridge(Node):
         self._stopped = False
         self._waiting_for_snapshot_logged = False
         self._snapshot_error_logged = ""
+        self._worker_stopped_logged = False
+        self._last_robot_state = None
 
         self._base_frame = session.config.dynamics.base_frame
         self._tool_frame = session.config.dynamics.tool_frame
         if not self._base_frame or not self._tool_frame:
-            raise RuntimeError("SerialArm dynamics base_frame/tool_frame must not be empty")
+            raise RuntimeError(
+                "SerialArm dynamics base_frame/tool_frame must not be empty"
+            )
 
         self._publisher = self.create_publisher(PoseStamped, pose_topic, 10)
+        self._clear_fault_service = self.create_service(
+            Trigger, CLEAR_FAULT_SERVICE, self._clear_fault
+        )
+        self._compliant_recovery_service = self.create_service(
+            Trigger, COMPLIANT_RECOVERY_SERVICE, self._enter_fault_compliant_recovery
+        )
+        self._rigid_hold_service = self.create_service(
+            Trigger, RIGID_HOLD_SERVICE, self._return_to_fault_rigid_hold
+        )
+        self._enable_drag_service = self.create_service(
+            Trigger, ENABLE_DRAG_SERVICE, self._enable_drag
+        )
 
         try:
             session.start()
@@ -141,20 +160,76 @@ class HandeyeBridge(Node):
             f"Handeye bridge ready: profile={robot_profile}, mode=COMPLIANT_DRAG, "
             f"pose={pose_topic}, frame={self._base_frame}->{self._tool_frame}, rate={publish_rate:.1f} Hz"
         )
+        self.get_logger().info(
+            "Recovery services: "
+            f"clear={CLEAR_FAULT_SERVICE}, "
+            f"compliant_recovery={COMPLIANT_RECOVERY_SERVICE}, "
+            f"rigid_hold={RIGID_HOLD_SERVICE}, "
+            f"enable_drag={ENABLE_DRAG_SERVICE}"
+        )
+
+    def _log_state_transition(self, state) -> None:
+        if state == self._last_robot_state:
+            return
+
+        previous = self._last_robot_state
+        self._last_robot_state = state
+
+        if state == RobotState.FAULT:
+            self.get_logger().warning(
+                "SerialArm entered FAULT. /arm/pose is paused while Core maintains the "
+                "configured fault hold. For an ordinary recoverable fault, wait for the "
+                f"hold to stabilize and call {CLEAR_FAULT_SERVICE}."
+            )
+            return
+
+        if state == RobotState.ACTIVE and previous == RobotState.FAULT:
+            self.get_logger().info(
+                "SerialArm FAULT cleared: robot is ACTIVE + RIGID_HOLD. "
+                "Wait for a fresh valid /arm/pose sample, then explicitly call "
+                f"{ENABLE_DRAG_SERVICE} to resume COMPLIANT_DRAG."
+            )
+            return
+
+        self.get_logger().info(f"SerialArm state changed to {state}")
 
     def _publish_pose(self) -> None:
+        state = self._session.state
         snapshot = self._session.snapshot
+        self._log_state_transition(state)
+
+        if not self._session.running:
+            if not self._worker_stopped_logged:
+                self.get_logger().error(
+                    "SerialArm worker is not running; online recovery is unavailable. "
+                    "Stop calibration and inspect the hardware/Core error before restarting."
+                )
+                self._worker_stopped_logged = True
+            return
+        self._worker_stopped_logged = False
+
         if snapshot.last_error:
             error_text = str(snapshot.last_error)
             if error_text != self._snapshot_error_logged:
                 self.get_logger().error(f"SerialArm worker error: {error_text}")
                 self._snapshot_error_logged = error_text
+        else:
+            self._snapshot_error_logged = ""
+
+        # Never publish stale pre-FAULT data. v0.5.1 invalidates the snapshot on
+        # clear_fault(), and the first new ACTIVE cycle makes it valid again.
+        if state != RobotState.ACTIVE:
+            return
+        if snapshot.last_error:
             return
         if not snapshot.valid:
             if not self._waiting_for_snapshot_logged:
-                self.get_logger().warning("Waiting for the first valid SerialArm snapshot")
+                self.get_logger().warning(
+                    "Waiting for a fresh valid SerialArm snapshot before publishing /arm/pose"
+                )
                 self._waiting_for_snapshot_logged = True
             return
+        self._waiting_for_snapshot_logged = False
 
         try:
             position, quaternion = transform_matrix_to_pose(snapshot.dynamics.tool_pose)
@@ -174,6 +249,117 @@ class HandeyeBridge(Node):
         message.pose.orientation.w = float(quaternion[3])
         self._publisher.publish(message)
 
+    def _clear_fault(self, _request, response):
+        """Clear a recoverable FAULT without automatically re-entering drag mode."""
+        if not self._session.running:
+            response.success = False
+            response.message = "RobotSession worker is not running; online FAULT recovery is unavailable"
+            return response
+        if self._session.state != RobotState.FAULT:
+            response.success = False
+            response.message = "Robot is not in FAULT"
+            return response
+
+        try:
+            self._session.clear_fault()
+        except Exception as error:
+            response.success = False
+            response.message = (
+                f"clear_fault rejected: {error}. Fault hold remains active; "
+                "retry only after the safety hold has stabilized if the fault is recoverable"
+            )
+            return response
+
+        response.success = True
+        response.message = (
+            "FAULT cleared. Robot is ACTIVE + RIGID_HOLD. Wait for a fresh valid pose, "
+            f"then call {ENABLE_DRAG_SERVICE} to resume COMPLIANT_DRAG"
+        )
+        return response
+
+    def _enter_fault_compliant_recovery(self, _request, response):
+        """Request Core's restricted FAULT compliant recovery mode."""
+        if not self._session.running:
+            response.success = False
+            response.message = "RobotSession worker is not running"
+            return response
+        if self._session.state != RobotState.FAULT:
+            response.success = False
+            response.message = "Robot is not in FAULT"
+            return response
+
+        try:
+            self._session.enter_fault_compliant_recovery()
+        except Exception as error:
+            response.success = False
+            response.message = (
+                f"Compliant FAULT recovery rejected by SerialArm-Core: {error}"
+            )
+            return response
+
+        response.success = True
+        response.message = (
+            "FAULT compliant recovery enabled. Use it only to move out of an allowed unsafe "
+            f"configuration, then call {RIGID_HOLD_SERVICE} before clearing the fault"
+        )
+        return response
+
+    def _return_to_fault_rigid_hold(self, _request, response):
+        """Return an in-FAULT compliant recovery session to rigid fault hold."""
+        if not self._session.running:
+            response.success = False
+            response.message = "RobotSession worker is not running"
+            return response
+        if self._session.state != RobotState.FAULT:
+            response.success = False
+            response.message = "Robot is not in FAULT"
+            return response
+
+        try:
+            self._session.return_to_fault_rigid_hold()
+        except Exception as error:
+            response.success = False
+            response.message = f"Return to FAULT rigid hold failed: {error}"
+            return response
+
+        response.success = True
+        response.message = "Robot returned to FAULT + RIGID_HOLD"
+        return response
+
+    def _enable_drag(self, _request, response):
+        """Explicitly re-enter compliant drag after a healthy ACTIVE cycle."""
+        if not self._session.running:
+            response.success = False
+            response.message = "RobotSession worker is not running"
+            return response
+        if self._session.state != RobotState.ACTIVE:
+            response.success = False
+            response.message = (
+                "Robot must be ACTIVE before COMPLIANT_DRAG can be enabled"
+            )
+            return response
+
+        snapshot = self._session.snapshot
+        if snapshot.last_error or not snapshot.valid:
+            response.success = False
+            response.message = (
+                "Wait for a fresh valid ACTIVE snapshot before enabling COMPLIANT_DRAG"
+            )
+            return response
+
+        try:
+            self._session.set_impedance_mode(JointImpedanceMode.COMPLIANT_DRAG)
+        except Exception as error:
+            response.success = False
+            response.message = f"Failed to request COMPLIANT_DRAG: {error}"
+            return response
+
+        response.success = True
+        response.message = (
+            "COMPLIANT_DRAG request submitted; hand-eye dragging may continue"
+        )
+        return response
+
     def stop_session(self) -> None:
         """Stop SerialArm exactly once using the Core lifecycle."""
         if self._stopped:
@@ -184,7 +370,9 @@ class HandeyeBridge(Node):
         try:
             self._session.stop()
         except Exception as error:
-            self.get_logger().error(f"Failed to stop SerialArm session cleanly: {error}")
+            self.get_logger().error(
+                f"Failed to stop SerialArm session cleanly: {error}"
+            )
         finally:
             self._session_started = False
 

@@ -199,6 +199,107 @@ success: true
 message: READY
 ```
 
+## 手眼标定专用 Bringup
+
+手眼标定不要启动整机 `bringup.launch.py`；专用入口只启动 `RobotSession` bridge，由它独占机械臂 Hardware Backend，并直接发布 SerialArm-Core 已计算的末端位姿：
+
+```bash
+ros2 launch tomato_picker_bringup handeye.launch.py
+```
+
+默认：
+
+```text
+robot_profile = dm_arm_gray
+pose_topic    = /arm/pose
+publish_rate  = 30 Hz
+start mode    = COMPLIANT_DRAG
+```
+
+可覆盖硬件连接：
+
+```bash
+ros2 launch tomato_picker_bringup handeye.launch.py \
+  robot_profile:=dm_arm_gray \
+  serial_port:=/dev/ttyACM0 \
+  baudrate:=921600 \
+  bus:=main_can
+```
+
+此入口不会启动 MoveIt、ros2_control、EEF、Task、Perception、GUI 或相机驱动，避免多个节点同时占用机械臂硬件
+
+Handeye-Calibration-App 使用：
+
+```text
+ROS2 input type = Pose
+input topic     = /arm/pose
+message         = geometry_msgs/msg/PoseStamped
+```
+
+发布规则：
+
+```text
+RobotState == ACTIVE
+AND snapshot.valid == true
+AND snapshot.last_error is empty
+        ↓
+发布 /arm/pose
+```
+
+因此 FAULT 期间以及 `clear_fault()` 后第一个新有效控制周期到来之前都不会发布旧位姿
+
+### FAULT 在线恢复
+
+SerialArm-Core `v0.5.1` 在可恢复 `FAULT + fault_holding` 下会保持 worker 存活并持续维护 fault hold；bridge 提供：
+
+```text
+/handeye/fault/clear               std_srvs/srv/Trigger
+/handeye/fault/compliant_recovery  std_srvs/srv/Trigger
+/handeye/fault/rigid_hold           std_srvs/srv/Trigger
+/handeye/drag/enable                std_srvs/srv/Trigger
+```
+
+普通瞬态可恢复 FAULT，例如偶发 `INVALID_DT`，推荐流程：
+
+```text
+COMPLIANT_DRAG
+    ↓
+FAULT + RIGID_HOLD
+    ↓
+等待 fault hold 稳定
+    ↓
+/handeye/fault/clear
+    ↓
+ACTIVE + RIGID_HOLD
+    ↓
+等待新的 valid snapshot
+    ↓
+/handeye/drag/enable
+    ↓
+COMPLIANT_DRAG
+```
+
+命令：
+
+```bash
+ros2 service call /handeye/fault/clear std_srvs/srv/Trigger "{}"
+ros2 service call /handeye/drag/enable std_srvs/srv/Trigger "{}"
+```
+
+`clear_fault()` **不会自动重新进入拖拽模式**；这是安全设计：清故障后先保持 `ACTIVE + RIGID_HOLD`，必须由操作员在确认机械臂和新位姿正常后显式调用 `/handeye/drag/enable`
+
+只有在需要人工把机械臂拖离 Core 允许的危险构型时才使用 FAULT compliant recovery：
+
+```bash
+ros2 service call /handeye/fault/compliant_recovery std_srvs/srv/Trigger "{}"
+ros2 service call /handeye/fault/rigid_hold std_srvs/srv/Trigger "{}"
+ros2 service call /handeye/fault/clear std_srvs/srv/Trigger "{}"
+```
+
+是否允许进入 compliant recovery 仍完全由 SerialArm-Core Safety 判定，Tomato-Picker 不绕过 Safety
+
+如果 Core 无法建立/维持 fault hold，worker 会停止，此时不要继续标定，应检查通信、电机和硬件状态后重新启动
+
 ## 采摘阶段
 
 默认阶段机：

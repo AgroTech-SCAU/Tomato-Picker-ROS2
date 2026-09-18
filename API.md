@@ -14,6 +14,9 @@
 | 单目标采摘 | `/tomato_picker/task/pick` | `tomato_picker_interfaces/action/PickTarget` |
 | Planning Scene | `/tomato_picker/perception/set_scene_enabled` | `tomato_picker_interfaces/srv/SetSceneEnabled` |
 | GUI 目标 | `/tomato_picker/gui/selected_target` | `tomato_picker_interfaces/msg/TargetObject` |
+| 手眼标定位姿 | `/arm/pose` | `geometry_msgs/msg/PoseStamped` |
+| 手眼 FAULT 清除 | `/handeye/fault/clear` | `std_srvs/srv/Trigger` |
+| 手眼重新拖拽 | `/handeye/drag/enable` | `std_srvs/srv/Trigger` |
 
 `bringup.launch.py` 按以下顺序提供这些接口：
 
@@ -530,3 +533,64 @@ ros2 launch tomato_picker_bringup bringup.launch.py \
 ```
 
 未提供覆盖值时，ARM 与 EEF 分别使用各自配置文件中的默认连接参数
+
+
+---
+
+## 10. Hand-eye Calibration Bringup
+
+专用入口：
+
+```bash
+ros2 launch tomato_picker_bringup handeye.launch.py
+```
+
+该入口由 `handeye_bridge` 直接持有 SerialArm-Core `RobotSession`，不会同时启动 ros2_control / MoveIt / EEF / perception / task
+
+### 10.1 Pose Topic
+
+```text
+/arm/pose
+geometry_msgs/msg/PoseStamped
+```
+
+`header.frame_id` 使用当前 Robot Profile 的 `dynamics.base_frame`，`pose` 为 SerialArm-Core `snapshot.dynamics.tool_pose` 对应的 `base_frame -> tool_frame` 位姿
+
+只有以下条件同时成立才发布：
+
+```text
+RobotState.ACTIVE
+snapshot.valid == true
+snapshot.last_error == empty
+```
+
+### 10.2 Online FAULT Recovery
+
+```text
+/handeye/fault/clear
+/handeye/fault/compliant_recovery
+/handeye/fault/rigid_hold
+/handeye/drag/enable
+```
+
+全部使用：
+
+```text
+std_srvs/srv/Trigger
+```
+
+普通可恢复 FAULT：
+
+```bash
+ros2 service call /handeye/fault/clear std_srvs/srv/Trigger "{}"
+```
+
+成功后 Robot 保持 `ACTIVE + RIGID_HOLD`；等 `/arm/pose` 恢复为新的有效样本后，由操作员显式恢复拖拽：
+
+```bash
+ros2 service call /handeye/drag/enable std_srvs/srv/Trigger "{}"
+```
+
+如果 `clear_fault` 返回失败，bridge 不自动重试，Core fault hold 继续保持；应根据返回的 SerialArm-Core 错误判断是否等待后重试或停止标定
+
+`/handeye/fault/compliant_recovery` 仅包装 Core 的受限 FAULT 柔性恢复能力；不允许的 fault 类型或不满足 Safety 条件时会直接返回失败
