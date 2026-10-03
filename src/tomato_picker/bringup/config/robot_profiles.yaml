@@ -1,0 +1,18 @@
+profiles:
+  tomato_picker:
+    core:
+      package: tomato_picker_description
+      config: config/core/tomato_picker.yaml
+    hardware:
+      plugin: serial_arm_hardware_damiao
+      config_package: dm_arm_description
+      config: config/hardware.yaml
+    description:
+      package: tomato_picker_description
+      urdf: urdf/tomato_picker.urdf
+      ros2_control_xacro: urdf/tomato_picker.ros2_control.xacro
+    controllers:
+      package: dm_arm_description
+      config: config/ros2_controllers.yaml
+    moveit:
+      package: tomato_picker_moveit_config

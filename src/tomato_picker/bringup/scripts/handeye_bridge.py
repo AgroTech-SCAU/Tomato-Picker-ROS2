@@ -88,7 +88,8 @@ class HandeyeBridge(Node):
     def __init__(self) -> None:
         super().__init__("handeye_bridge")
 
-        self.declare_parameter("robot_profile", "dm_arm_gray")
+        self.declare_parameter("robot_profile", "tomato_picker")
+        self.declare_parameter("profile_file", "")
         self.declare_parameter("serial_port", "")
         self.declare_parameter("baudrate", "")
         self.declare_parameter("bus", "")
@@ -96,6 +97,7 @@ class HandeyeBridge(Node):
         self.declare_parameter("publish_rate", 30.0)
 
         robot_profile = str(self.get_parameter("robot_profile").value)
+        profile_file = _optional_text(str(self.get_parameter("profile_file").value))
         serial_port = _optional_text(str(self.get_parameter("serial_port").value))
         baudrate = _optional_baudrate(str(self.get_parameter("baudrate").value))
         bus = _optional_text(str(self.get_parameter("bus").value))
@@ -109,7 +111,7 @@ class HandeyeBridge(Node):
         if not math.isfinite(publish_rate) or publish_rate <= 0.0:
             raise ValueError("publish_rate must be > 0")
 
-        profile = load_robot_profile_core(robot_profile)
+        profile = load_robot_profile_core(robot_profile, profile_file or "")
         session = RobotSession(
             profile.core_config_path,
             profile.hardware_plugin,
@@ -157,7 +159,7 @@ class HandeyeBridge(Node):
 
         self._timer = self.create_timer(1.0 / publish_rate, self._publish_pose)
         self.get_logger().info(
-            f"Handeye bridge ready: profile={robot_profile}, mode=COMPLIANT_DRAG, "
+            f"Handeye bridge ready: profile={robot_profile}, profile_file={profile_file or 'auto'}, mode=COMPLIANT_DRAG, "
             f"pose={pose_topic}, frame={self._base_frame}->{self._tool_frame}, rate={publish_rate:.1f} Hz"
         )
         self.get_logger().info(

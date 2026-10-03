@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="Tomato-Picker">
+  <xacro:include filename="$(find tomato_picker_description)/urdf/tomato_picker.urdf"/>
+</robot>

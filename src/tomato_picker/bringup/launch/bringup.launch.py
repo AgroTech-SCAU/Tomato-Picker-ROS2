@@ -21,20 +21,22 @@ EEF_MODES = {"off", "mock", "damiao"}
 
 def generate_launch_description():
     robot_profile = LaunchConfiguration("robot_profile")
+    profile_file = LaunchConfiguration("profile_file")
     serial_port = LaunchConfiguration("serial_port")
     baudrate = LaunchConfiguration("baudrate")
     bus = LaunchConfiguration("bus")
     eef_mode = LaunchConfiguration("eef_mode")
     use_sim_time = LaunchConfiguration("use_sim_time")
 
-    serial_arm = IncludeLaunchDescription(
+    arm_stack = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
-                [FindPackageShare("serial_arm_ros2_control"), "launch", "moveit.launch.py"]
+                [FindPackageShare("tomato_picker_bringup"), "launch", "arm.launch.py"]
             )
         ),
         launch_arguments={
             "robot_profile": robot_profile,
+            "profile_file": profile_file,
             "use_sim_time": use_sim_time,
             "serial_port": serial_port,
             "baudrate": baudrate,
@@ -208,7 +210,13 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("robot_profile", default_value="dm_arm_gray"),
+            DeclareLaunchArgument("robot_profile", default_value="tomato_picker"),
+            DeclareLaunchArgument(
+                "profile_file",
+                default_value=PathJoinSubstitution(
+                    [FindPackageShare("tomato_picker_bringup"), "config", "robot_profiles.yaml"]
+                ),
+            ),
             DeclareLaunchArgument("serial_port", default_value=""),
             DeclareLaunchArgument("baudrate", default_value=""),
             DeclareLaunchArgument("bus", default_value=""),
@@ -216,14 +224,14 @@ def generate_launch_description():
             DeclareLaunchArgument("start_perception", default_value="true"),
             DeclareLaunchArgument("start_wrist_camera", default_value="false"),
             DeclareLaunchArgument("publish_wrist_camera_mount_tf", default_value="false"),
-            DeclareLaunchArgument("wrist_camera_mount_frame", default_value="camera"),
+            DeclareLaunchArgument("wrist_camera_mount_frame", default_value="Link6"),
             DeclareLaunchArgument("wrist_camera_base_frame", default_value="camera_link"),
             DeclareLaunchArgument("start_gui", default_value="false"),
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             SetEnvironmentVariable("TOMATO_PICKER_SERIAL_PORT", serial_port),
             SetEnvironmentVariable("TOMATO_PICKER_BAUDRATE", baudrate),
             SetEnvironmentVariable("TOMATO_PICKER_BUS", bus),
-            serial_arm,
+            arm_stack,
             wrist_camera,
             wrist_camera_mount_tf,
             arm_ready_gate,

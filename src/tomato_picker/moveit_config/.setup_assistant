@@ -1,0 +1,9 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: tomato_picker_moveit_config
+    relative_path: config/Tomato-Picker.urdf.xacro
+  srdf:
+    relative_path: config/Tomato-Picker.srdf
+  package_settings:
+    author_name: Kaede Rei
+    author_email: kaerei@foxmail.com
