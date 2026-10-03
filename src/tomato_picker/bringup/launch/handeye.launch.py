@@ -9,6 +9,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     robot_profile = LaunchConfiguration("robot_profile")
     profile_file = LaunchConfiguration("profile_file")
+    resource_paths = LaunchConfiguration("resource_paths")
     serial_port = LaunchConfiguration("serial_port")
     baudrate = LaunchConfiguration("baudrate")
     bus = LaunchConfiguration("bus")
@@ -25,6 +26,7 @@ def generate_launch_description():
             {
                 "robot_profile": ParameterValue(robot_profile, value_type=str),
                 "profile_file": ParameterValue(profile_file, value_type=str),
+                "resource_paths": ParameterValue(resource_paths, value_type=str),
                 "serial_port": ParameterValue(serial_port, value_type=str),
                 "baudrate": ParameterValue(baudrate, value_type=str),
                 "bus": ParameterValue(bus, value_type=str),
@@ -43,6 +45,7 @@ def generate_launch_description():
                     [FindPackageShare("tomato_picker_bringup"), "config", "robot_profiles.yaml"]
                 ),
             ),
+            DeclareLaunchArgument("resource_paths", default_value=""),
             DeclareLaunchArgument("serial_port", default_value=""),
             DeclareLaunchArgument("baudrate", default_value=""),
             DeclareLaunchArgument("bus", default_value=""),

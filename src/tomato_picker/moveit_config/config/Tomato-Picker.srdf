@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <robot name="Tomato-Picker">
   <group name="arm">
-    <chain base_link="base_link" tip_link="Link6"/>
+    <chain base_link="base_link" tip_link="tool0"/>
   </group>
 
   <group_state name="home" group="arm">

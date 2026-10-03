@@ -12,6 +12,8 @@
 # - URDF 初版已完成 drag 真机试运行，joint1~joint6 基本方向与模型行为可用
 # - Tomato-Picker 尚未完成独立的重力比例、力矩零偏、摩擦与导纳参数标定
 # - 未特别说明的控制/导纳参数当前沿用已验证的 DM-Arm Gray 配置作为 bring-up 初值
+# - TODO(calibration): 末端 CAD/TCP 定型后依次复核 gravity_scale -> torque_bias/threshold -> friction -> admittance M/D/K -> park/fault-recovery limits
+# - TODO(tool): 当前 Link6->tool0 为零变换占位；收到修正版末端/相机模型后更新 tool0/TCP/Camera fixed transforms
 # - SerialArm-Core 仅控制 joint1~joint6；CAD 末端附属关节以固定负载形式计入机械臂动力学
 
 # 01 model
@@ -19,7 +21,7 @@ model:
   urdf_path: ../../urdf/tomato_picker.urdf                                 # Tomato-Picker 动力学 URDF，路径相对当前 YAML
   joint_names: [joint1, joint2, joint3, joint4, joint5, joint6]           # SerialArm-Core 受控关节名称与固定顺序
   base_frame: base_link                                                   # 动力学基坐标系
-  tool_frame: Link6                                                       # 当前机械臂动力学末端坐标系；最终 TCP / tool0 定型后再评估是否调整
+  tool_frame: tool0                                                       # 稳定工具参考 frame；当前 Link6->tool0 为零变换占位，末端 CAD/TCP 定型后只更新 URDF fixed transform
   gravity: [0.0, 0.0, -9.81]                                              # 世界坐标系重力加速度 m/s^2
   # 各关节重力补偿比例 [0,2]；1.0=直接使用 URDF 原模型，待 Tomato-Picker 独立重力标定后更新
   gravity_scale: {joint1: 1.0, joint2: 1.0, joint3: 1.0, joint4: 1.0, joint5: 1.0, joint6: 1.0}
@@ -88,7 +90,7 @@ safety_policy:
     default_mode: rigid_hold                        # FAULT 默认保持模式；当前固定为 rigid_hold
     allow_compliant_recovery: true                  # 是否允许操作员请求受限柔性恢复
     require_operator_request: true                  # 是否要求操作员显式请求柔性恢复
-    # 是否确认重力模型已验证，可用于低增益恢复；Tomato-Picker 完成独立重力模型验证前应重新确认此值
+    # 是否确认重力模型已验证，可用于低增益恢复
     gravity_model_validated: true
     recovery_timeout_s: 30.0                        # 柔性恢复最大持续时间 s
     compliant_recovery:

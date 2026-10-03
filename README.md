@@ -86,7 +86,7 @@ Tomato-Picker-ROS2/
 
 ### 1. 获取 SerialArm-Core
 
-当前工作区固定使用 **SerialArm-Core `v0.5.1`**；在仓库根目录：
+当前工作区固定使用 **SerialArm-Core `v0.5.2`**；Tomato-Picker 通过 v0.5.2 的外部 `profile_file/resource_paths` 接口持有自己的 Robot Profile；在仓库根目录：
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -99,6 +99,19 @@ vcs import src < repos/serial_arm.repos
 rm -rf src/SerialArm-Core
 vcs import src < repos/serial_arm.repos
 ```
+
+当前 Robot Profile 所有权：
+
+```text
+tomato_picker_bringup/config/robot_profiles.yaml
+  ├── core       -> tomato_picker_description
+  ├── hardware   -> SerialArm Damiao backend + DM-Arm hardware mapping
+  ├── description-> tomato_picker_description
+  ├── controllers-> tomato_picker_bringup/config/ros2_controllers.yaml
+  └── moveit     -> tomato_picker_moveit_config
+```
+
+`arm.launch.py` 只负责把这些参数传给 SerialArm-Core v0.5.2 的通用 `moveit.launch.py`，不再重复实现 robot_state_publisher、ros2_control 和 controller spawner
 
 ### 2. 安装依赖并编译
 
@@ -250,7 +263,7 @@ AND snapshot.last_error is empty
 
 ### FAULT 在线恢复
 
-SerialArm-Core `v0.5.1` 在可恢复 `FAULT + fault_holding` 下会保持 worker 存活并持续维护 fault hold；bridge 提供：
+SerialArm-Core `v0.5.2` 继承并保持 v0.5.1 引入的在线 FAULT 恢复语义：在可恢复 `FAULT + fault_holding` 下 worker 会保持存活并持续维护 fault hold；bridge 提供：
 
 ```text
 /handeye/fault/clear               std_srvs/srv/Trigger

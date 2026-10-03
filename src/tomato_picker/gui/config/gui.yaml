@@ -12,7 +12,7 @@ topics:
 
 frames:
   target_frame: base_link
-  tool_frame: Link6
+  tool_frame: tool0
 
 selection:
   point_method: skeleton_centroid

@@ -106,7 +106,7 @@ class HandeyeBridgeContractTest(unittest.TestCase):
 
     def test_bridge_uses_core_session_drag_and_cached_fk(self):
         source = BRIDGE.read_text(encoding="utf-8")
-        self.assertIn("load_robot_profile_core(robot_profile, profile_file or \"\")", source)
+        self.assertIn("load_robot_profile_core(robot_profile, profile_file or \"\", resource_paths)", source)
         self.assertIn("RobotSession(", source)
         self.assertIn("JointImpedanceMode.COMPLIANT_DRAG", source)
         self.assertIn("snapshot.dynamics.tool_pose", source)
@@ -122,6 +122,7 @@ class HandeyeBridgeContractTest(unittest.TestCase):
         source = LAUNCH.read_text(encoding="utf-8")
         self.assertIn('default_value="tomato_picker"', source)
         self.assertIn('robot_profiles.yaml', source)
+        self.assertIn('resource_paths', source)
         self.assertIn('default_value="/arm/pose"', source)
         self.assertIn('default_value="30.0"', source)
         self.assertIn('executable="handeye_bridge"', source)
@@ -136,7 +137,7 @@ class HandeyeBridgeContractTest(unittest.TestCase):
             self.assertNotIn(forbidden, source)
 
 
-    def test_v051_fault_recovery_services_are_exposed(self):
+    def test_v052_fault_recovery_services_are_exposed(self):
         source = BRIDGE.read_text(encoding="utf-8")
         self.assertIn("RobotState", source)
         self.assertIn("Trigger", source)

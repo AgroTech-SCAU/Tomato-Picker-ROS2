@@ -22,6 +22,7 @@ EEF_MODES = {"off", "mock", "damiao"}
 def generate_launch_description():
     robot_profile = LaunchConfiguration("robot_profile")
     profile_file = LaunchConfiguration("profile_file")
+    resource_paths = LaunchConfiguration("resource_paths")
     serial_port = LaunchConfiguration("serial_port")
     baudrate = LaunchConfiguration("baudrate")
     bus = LaunchConfiguration("bus")
@@ -37,6 +38,7 @@ def generate_launch_description():
         launch_arguments={
             "robot_profile": robot_profile,
             "profile_file": profile_file,
+            "resource_paths": resource_paths,
             "use_sim_time": use_sim_time,
             "serial_port": serial_port,
             "baudrate": baudrate,
@@ -217,6 +219,7 @@ def generate_launch_description():
                     [FindPackageShare("tomato_picker_bringup"), "config", "robot_profiles.yaml"]
                 ),
             ),
+            DeclareLaunchArgument("resource_paths", default_value=""),
             DeclareLaunchArgument("serial_port", default_value=""),
             DeclareLaunchArgument("baudrate", default_value=""),
             DeclareLaunchArgument("bus", default_value=""),

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import math
+import os
 from typing import Optional, Tuple
 
 import numpy as np
@@ -72,6 +73,12 @@ def _optional_text(value: str) -> Optional[str]:
     return value if value else None
 
 
+
+
+def _resource_path_list(value: str):
+    """Parse an os.pathsep-separated resource path string for SerialArm-Core v0.5.2."""
+    return [item.strip() for item in value.split(os.pathsep) if item.strip()]
+
 def _optional_baudrate(value: str) -> Optional[int]:
     value = value.strip()
     if not value:
@@ -90,6 +97,7 @@ class HandeyeBridge(Node):
 
         self.declare_parameter("robot_profile", "tomato_picker")
         self.declare_parameter("profile_file", "")
+        self.declare_parameter("resource_paths", "")
         self.declare_parameter("serial_port", "")
         self.declare_parameter("baudrate", "")
         self.declare_parameter("bus", "")
@@ -98,6 +106,7 @@ class HandeyeBridge(Node):
 
         robot_profile = str(self.get_parameter("robot_profile").value)
         profile_file = _optional_text(str(self.get_parameter("profile_file").value))
+        resource_paths = _resource_path_list(str(self.get_parameter("resource_paths").value))
         serial_port = _optional_text(str(self.get_parameter("serial_port").value))
         baudrate = _optional_baudrate(str(self.get_parameter("baudrate").value))
         bus = _optional_text(str(self.get_parameter("bus").value))
@@ -111,7 +120,7 @@ class HandeyeBridge(Node):
         if not math.isfinite(publish_rate) or publish_rate <= 0.0:
             raise ValueError("publish_rate must be > 0")
 
-        profile = load_robot_profile_core(robot_profile, profile_file or "")
+        profile = load_robot_profile_core(robot_profile, profile_file or "", resource_paths)
         session = RobotSession(
             profile.core_config_path,
             profile.hardware_plugin,
@@ -159,7 +168,7 @@ class HandeyeBridge(Node):
 
         self._timer = self.create_timer(1.0 / publish_rate, self._publish_pose)
         self.get_logger().info(
-            f"Handeye bridge ready: profile={robot_profile}, profile_file={profile_file or 'auto'}, mode=COMPLIANT_DRAG, "
+            f"Handeye bridge ready: profile={robot_profile}, profile_file={profile_file or 'auto'}, resource_paths={len(resource_paths)}, mode=COMPLIANT_DRAG, "
             f"pose={pose_topic}, frame={self._base_frame}->{self._tool_frame}, rate={publish_rate:.1f} Hz"
         )
         self.get_logger().info(
@@ -218,7 +227,7 @@ class HandeyeBridge(Node):
         else:
             self._snapshot_error_logged = ""
 
-        # Never publish stale pre-FAULT data. v0.5.1 invalidates the snapshot on
+        # Never publish stale pre-FAULT data. v0.5.2 keeps the v0.5.1 snapshot invalidation semantics on
         # clear_fault(), and the first new ACTIVE cycle makes it valid again.
         if state != RobotState.ACTIVE:
             return

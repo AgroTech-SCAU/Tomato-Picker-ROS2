@@ -203,6 +203,14 @@
         <axis xyz="0 0 -1"/>
         <limit lower="-2.094395" upper="2.094395" effort="20" velocity="5.4"/>
     </joint>
+
+    <link name="tool0"/>
+    <joint name="tool0_joint" type="fixed">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <parent link="Link6"/>
+        <child link="tool0"/>
+    </joint>
+
     <link name="Link7">
         <inertial>
             <origin xyz="-0.00067257 -0.021111 0.043207" rpy="0 0 0" />
