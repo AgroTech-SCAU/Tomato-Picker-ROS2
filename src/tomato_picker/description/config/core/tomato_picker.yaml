@@ -8,20 +8,20 @@
 # 05 shutdown         停放与正常关机策略
 # 06 capability       可选高级能力
 #
-# 当前状态（2026-10-03）
-# - URDF 初版已完成 drag 真机试运行，joint1~joint6 基本方向与模型行为可用
-# - Tomato-Picker 尚未完成独立的重力比例、力矩零偏、摩擦与导纳参数标定
+# 当前状态（2026-10-04）
+# - 已同步最新 SolidWorks 模型；joint3/joint4 方向与末端有效 STL 已在新版 CAD 中修正
+# - 已完成 drag 初步真机验证，但尚未完成 Tomato-Picker 独立动力学/力矩/摩擦/导纳标定
 # - 未特别说明的控制/导纳参数当前沿用已验证的 DM-Arm Gray 配置作为 bring-up 初值
-# - TODO(calibration): 末端 CAD/TCP 定型后依次复核 gravity_scale -> torque_bias/threshold -> friction -> admittance M/D/K -> park/fault-recovery limits
-# - TODO(tool): 当前 Link6->tool0 为零变换占位；收到修正版末端/相机模型后更新 tool0/TCP/Camera fixed transforms
-# - SerialArm-Core 仅控制 joint1~joint6；CAD 末端附属关节以固定负载形式计入机械臂动力学
+# - TODO(calibration): 最终机械模型定型后依次复核 gravity_scale -> torque_bias/threshold -> friction -> admittance M/D/K -> park/fault-recovery limits
+# - TODO(tool): tool0 当前固定在新版 joint7 安装轴心；待机械明确 TCP 与相机安装坐标后补充 tcp/camera frames
+# - SerialArm-Core 仅控制 joint1~joint6；真实 EEF joint7/joint7-1/joint7-2 保留在 URDF，但不进入 Core joint_names
 
 # 01 model
 model:
   urdf_path: ../../urdf/tomato_picker.urdf                                 # Tomato-Picker 动力学 URDF，路径相对当前 YAML
   joint_names: [joint1, joint2, joint3, joint4, joint5, joint6]           # SerialArm-Core 受控关节名称与固定顺序
   base_frame: base_link                                                   # 动力学基坐标系
-  tool_frame: tool0                                                       # 稳定工具参考 frame；当前 Link6->tool0 为零变换占位，末端 CAD/TCP 定型后只更新 URDF fixed transform
+  tool_frame: tool0                                                       # 手臂侧工具安装参考 frame；当前位于新版 joint7 安装轴心，最终 TCP/相机坐标另行定义
   gravity: [0.0, 0.0, -9.81]                                              # 世界坐标系重力加速度 m/s^2
   # 各关节重力补偿比例 [0,2]；1.0=直接使用 URDF 原模型，待 Tomato-Picker 独立重力标定后更新
   gravity_scale: {joint1: 1.0, joint2: 1.0, joint3: 1.0, joint4: 1.0, joint5: 1.0, joint6: 1.0}
@@ -91,7 +91,7 @@ safety_policy:
     allow_compliant_recovery: true                  # 是否允许操作员请求受限柔性恢复
     require_operator_request: true                  # 是否要求操作员显式请求柔性恢复
     # 是否确认重力模型已验证，可用于低增益恢复
-    gravity_model_validated: true
+    gravity_model_validated: false
     recovery_timeout_s: 30.0                        # 柔性恢复最大持续时间 s
     compliant_recovery:
       # 柔性恢复位置刚度；当前沿用 DM-Arm Gray 初值

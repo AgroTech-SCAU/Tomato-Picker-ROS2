@@ -2,7 +2,7 @@
 <package format="3">
   <name>tomato_picker_description</name>
   <version>0.1.1</version>
-  <description>Tomato-Picker robot description based on the 2026-10-03 SolidWorks 10.3 model, adapted to the six-axis SerialArm-Core arm interface.</description>
+  <description>Tomato-Picker robot description based on the current SolidWorks model, adapted to the SerialArm-Core arm interface and separate EEF joints.</description>
   <maintainer email="kaerei@foxmail.com">Kaede Rei</maintainer>
   <license>MIT</license>
 
